@@ -1,128 +1,61 @@
-// ================= 1. КАРТА =================
-const map = L.map('map', {
-  center: [62.046, 129.740],
+// ================= 1. ИНИЦИАЛИЗАЦИЯ КАРТЫ =================
+const map = L.map('map', { 
+  center: [62.010346, 129.686212], // Координаты АГАТУ
   zoom: 16,
   zoomControl: true
 });
 
-// ================= 2. СТИЛИ ТАЙЛОВ =================
-const TILE_STYLES = {
-  osm: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '© OpenStreetMap',
-    maxZoom: 19
-  },
-  satellite: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: '© Esri, Maxar, Earthstar Geographics',
-    maxZoom: 19
-  },
-  dark: {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '© CARTO, © OpenStreetMap',
-    maxZoom: 20
-  },
-  light: {
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    attribution: '© CARTO, © OpenStreetMap',
-    maxZoom: 20
-  },
-  topo: {
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attribution: '© OpenTopoMap, © OpenStreetMap',
-    maxZoom: 17
+// Добавляем слой карты (Схема)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+  attribution: '© OpenStreetMap' 
+}).addTo(map);
+
+// Переменные
+let routeLine = null; 
+let markers = {};
+let editMode = false; // Глобальная переменная для режима редактирования
+
+// Обработчик переключения стилей карты
+document.getElementById('styleSelect').addEventListener('change', (e) => {
+  map.eachLayer((layer) => {
+    if (layer instanceof L.TileLayer) map.removeLayer(layer);
+  });
+
+  if (e.target.value === 'satellite') {
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '© Esri'
+    }).addTo(map);
+  } else {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+      attribution: '© OpenStreetMap' 
+    }).addTo(map);
   }
-};
-
-// ================= 3. ТЕКУЩИЙ СЛОЙ ТАЙЛОВ =================
-let currentTileLayer = null;
-
-// Обычные стили
-function setTileStyle(styleKey) {
-  const cfg = TILE_STYLES[styleKey] || TILE_STYLES.osm;
-  if (currentTileLayer) map.removeLayer(currentTileLayer);
-  currentTileLayer = L.tileLayer(cfg.url, {
-    attribution: cfg.attribution,
-    maxZoom: cfg.maxZoom,
-    subdomains: 'abc'
-  }).addTo(map);
-}
-
-// Гибрид: спутник + подписи
-function setSatelliteHybrid() {
-  if (currentTileLayer) map.removeLayer(currentTileLayer);
-
-  const sat = L.tileLayer(
-    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    { attribution: '© Esri', maxZoom: 19 }
-  );
-
-  const labels = L.tileLayer(
-    'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
-    { attribution: '© CARTO', maxZoom: 20, pane: 'overlayPane' }
-  );
-
-  currentTileLayer = L.layerGroup([sat, labels]).addTo(map);
-}
-
-// Стартовый стиль
-setTileStyle('osm');
-
-// Переключатель стилей
-document.getElementById('styleSelect').addEventListener('change', e => {
-  if (e.target.value === 'hybrid') setSatelliteHybrid();
-  else setTileStyle(e.target.value);
 });
 
-// ================= 4. СЛОИ =================
-const layers = {
-  buildings: L.layerGroup().addTo(map),
-  fields: L.layerGroup().addTo(map),
-  pastures: L.layerGroup().addTo(map),
-  greenhouses: L.layerGroup().addTo(map)
-};
-
-// ================= 5. ОТРИСОВКА ОБЪЕКТОВ =================
-const markers = {};
-
+// ================= 2. ОТРИСОВКА МАРКЕРОВ =================
 function renderObjects() {
-  Object.values(layers).forEach(l => l.clearLayers());
-  Object.keys(markers).forEach(k => delete markers[k]);
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  markers = {};
 
   OBJECTS.forEach(obj => {
     const marker = L.marker([obj.lat, obj.lng], {
-      title: obj.name,
-      icon: L.divIcon({
-        className: 'custom-icon',
-        html: `<div style="font-size:24px;">${obj.icon || '📍 '}</div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32]
+      icon: L.divIcon({ 
+        className: 'custom-icon', 
+        html: `<div style="font-size:24px;">${obj.icon || '📍 '}</div>`, 
+        iconSize: [32, 32], 
+        iconAnchor: [16, 32] 
       })
     });
+    
     marker.bindTooltip(obj.name);
     marker.on('click', () => showCard(obj));
-
-    let layerKey = 'buildings';
-    if (obj.type === 'field') layerKey = 'fields';
-    if (obj.type === 'pasture') layerKey = 'pastures';
-    if (obj.type === 'greenhouse') layerKey = 'greenhouses';
-    if (obj.type === 'route') layerKey = 'fields';
-
-    layers[layerKey].addLayer(marker);
+    marker.addTo(map);
     markers[obj.id] = marker;
   });
 }
 renderObjects();
 
-// ================= 6. ПЕРЕКЛЮЧЕНИЕ СЛОЁВ =================
-document.querySelectorAll('.layer-toggle').forEach(t => {
-  t.onchange = e => {
-    const l = layers[e.target.dataset.layer];
-    e.target.checked ? map.addLayer(l) : map.removeLayer(l);
-  };
-});
-
-// ================= 7. ПОИСК =================
+// ================= 3. ПОИСК ОБЪЕКТОВ =================
 const searchInput = document.getElementById('search');
 const resultList = document.getElementById('resultList');
 
@@ -131,51 +64,43 @@ searchInput.oninput = () => {
   resultList.innerHTML = '';
   if (!q) return;
 
-  OBJECTS.filter(o =>
-    o.name.toLowerCase().includes(q) ||
-
-(o.desc || '').toLowerCase().includes(q)
-  ).forEach(o => {
+  OBJECTS.filter(o => o.name.toLowerCase().includes(q)).forEach(o => {
     const div = document.createElement('div');
     div.className = 'result-item';
-    div.textContent = `${o.icon || '📍 '} ${o.name}`;
-    div.onclick = () => {
-      map.setView([o.lat, o.lng], 18);
-      showCard(o);
+    div.textContent = `${o.icon} ${o.name}`;
+    div.onclick = () => { 
+      map.setView([o.lat, o.lng], 18); 
+      showCard(o); 
     };
     resultList.appendChild(div);
   });
 };
 
-// ================= 8. КАРТОЧКА ОБЪЕКТА =================
+// ================= 4. КАРТОЧКА ОБЪЕКТА =================
 const infoCard = document.getElementById('infoCard');
-const cardTitle = document.getElementById('cardTitle');
-const cardType = document.getElementById('cardType');
-const cardDesc = document.getElementById('cardDesc');
 const showPlanBtn = document.getElementById('showPlan');
+const editBtn = document.getElementById('editModeBtn');
 let selected = null;
 
 function showCard(obj) {
   selected = obj;
-  cardTitle.textContent = `${obj.icon || '📍 '} ${obj.name}`;
-  cardType.textContent = `Тип: ${obj.type}`;
-  cardDesc.textContent = obj.desc || '';
+  document.getElementById('cardTitle').textContent = `${obj.icon || '📍 '} ${obj.name}`;
+  document.getElementById('cardType').textContent = `Тип: ${obj.type}`;
+  document.getElementById('cardDesc').textContent = obj.desc || '';
   infoCard.classList.remove('hidden');
 
-  if (obj.plan) {
+  if (obj.floors && obj.floors.length > 0) {
     showPlanBtn.classList.remove('hidden');
-    showPlanBtn.onclick = () => openPlan(obj);
+    if (editBtn) editBtn.classList.remove('hidden');
   } else {
     showPlanBtn.classList.add('hidden');
+    if (editBtn) editBtn.classList.add('hidden');
   }
 }
 
-document.getElementById('closeCard').onclick = () => {
-  infoCard.classList.add('hidden');
-  selected = null;
-};
+document.getElementById('closeCard').onclick = () => infoCard.classList.add('hidden');
 
-// ================= 9. БЫСТРЫЙ ПЕРЕХОД =================
+// Быстрый переход
 document.querySelectorAll('.quick-btn').forEach(btn => {
   btn.onclick = () => {
     const obj = OBJECTS.find(o => o.id === btn.dataset.target);
@@ -183,126 +108,324 @@ document.querySelectorAll('.quick-btn').forEach(btn => {
   };
 });
 
-// ================= 10. ПЛАН ЗДАНИЯ =================
+// ================= 5. 2D-КАРТА ЭТАЖЕЙ =================
 const planModal = document.getElementById('planModal');
-const planTitle = document.getElementById('planTitle');
-const planImage = document.getElementById('planImage');
+const floorButtons = document.getElementById('floorButtons');
+let planMap = null;
 
 function openPlan(obj) {
-  planTitle.textContent = `🏢  План: ${obj.name}`;
-  planImage.src = obj.plan || 'data:image/svg+xml;utf8,' + encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300">
-      <rect width="100%" height="100%" fill="#f0f0f0"/>
-      <text x="50%" y="45%" text-anchor="middle" font-size="18" fill="#1b5e20">${obj.name}</text>
-      <text x="50%" y="60%" text-anchor="middle" font-size="14" fill="#666">План здания (заглушка)</text>
-    </svg>`);
+  document.getElementById('planTitle').textContent = `🌐  ${obj.name} (Внутренняя карта)`;
   planModal.classList.remove('hidden');
+  floorButtons.innerHTML = '';
+
+  if (obj.floors) {
+    obj.floors.forEach((floor, index) => {
+      const btn = document.createElement('button');
+      btn.textContent = floor.name;
+      btn.style.padding = '8px 15px';
+
+
+btn.style.border = '1px solid #1b5e20';
+      btn.style.borderRadius = '6px';
+      btn.style.background = index === 0 ? '#1b5e20' : 'white';
+      btn.style.color = index === 0 ? 'white' : '#1b5e20';
+      btn.style.cursor = 'pointer';
+      btn.style.whiteSpace = 'nowrap';
+
+      btn.onclick = () => {
+        loadFloorPlan(floor);
+        Array.from(floorButtons.children).forEach(b => { b.style.background = 'white'; b.style.color = '#1b5e20'; });
+        btn.style.background = '#1b5e20'; btn.style.color = 'white';
+      };
+
+      floorButtons.appendChild(btn);
+      if (index === 0) loadFloorPlan(floor);
+    });
+  }
 }
 
-document.getElementById('closePlan').onclick = () => planModal.classList.add('hidden');
-planModal.onclick = e => { if (e.target === planModal) planModal.classList.add('hidden'); };
+function loadFloorPlan(floor) {
+  if (planMap) planMap.remove();
 
-// ================= 11. МАРШРУТ (OSRM) =================
-let routeLine = null, userMarker = null;
-const routeInfo = document.getElementById('routeInfo');
+  // Создаем карту Leaflet. Если editMode = true, карту нельзя двигать
+  planMap = L.map('planMap', { 
+    crs: L.CRS.Simple, 
+    minZoom: -1, 
+    maxZoom: 2, 
+    dragging: !editMode, 
+    touchZoom: !editMode 
+  });
 
-async function buildRoute(to) {
-  if (!navigator.geolocation) return alert('Геолокация не поддерживается');
+  const w = 1000; 
+  const h = 800;
+  const bounds = [[0, 0], [h, w]];
+  
+  L.imageOverlay(floor.img, bounds).addTo(planMap);
+  planMap.fitBounds(bounds);
 
-  navigator.geolocation.getCurrentPosition(async pos => {
-    const from = [pos.coords.latitude, pos.coords.longitude];
+  // Проверяем, есть ли вообще кабинеты на этом этаже
+if (floor.rooms && floor.rooms.length > 0) {
+  floor.rooms.forEach(room => {
+    
+    // 1. Создаем маркер
+    // Создаем обычный маркер (он умеет перетаскиваться), но стилизуем его как кружок
+const marker = L.marker([room.y, room.x], {
+  draggable: editMode, // Включаем перетаскивание, если нажат режим редактирования
+  icon: L.divIcon({
+    className: 'custom-room-marker',
+    html: `<div style="width: 16px; height: 16px; background-color: white; border: 2px solid #1b5e20; border-radius: 50%; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
+  })
+}).addTo(planMap);
 
-    if (userMarker) map.removeLayer(userMarker);
-    userMarker = L.marker(from, { title: 'Вы здесь' })
-      .addTo(map).bindPopup('Вы здесь').openPopup();
+    // 2. Привязываем всплывающее окно
+    marker.bindPopup(`
+      <div style="font-family: sans-serif; text-align: center;">
+        <b style="color: #1b5e20; font-size: 14px;">${room.name}</b><br>
+        <span style="font-size: 12px;">${room.desc}</span>
+      </div>
+    `);
 
-    if (routeLine) map.removeLayer(routeLine);
-
-    const url = `https://router.project-osrm.org/route/v1/foot/${from[1]},${from[0]};${to.lng},${to.lat}?overview=full&geometries=geojson`;
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.routes && data.routes[0]) {
-        const route = data.routes[0];
-        const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
-        routeLine = L.polyline(coords, { color:'#1b5e20', weight:5 }).addTo(map);
-        map.fitBounds(routeLine.getBounds(), { padding:[40,40] });
-
-        const dist = (route.distance / 1000).toFixed(2);
-        const time = Math.round(route.duration / 60);
-        routeInfo.textContent = `📏  ${dist} км · ⏱ ~${time} мин (пешком)`;
-        routeInfo.classList.remove('hidden');
-      } else throw new Error('Маршрут не найден');
-    } catch (e) {
-      routeLine = L.polyline([from, [to.lat, to.lng]], {
-        color:'#1b5e20', weight:4, dashArray:'8,8'
-      }).addTo(map);
-map.fitBounds(routeLine.getBounds(), { padding:[40,40] });
-      routeInfo.textContent = `⚠ Прямая линия (${e.message})`;
-      routeInfo.classList.remove('hidden');
+    // 3. Включаем перетаскивание, ТОЛЬКО если включен режим редактирования
+    if (editMode) {
+      marker.dragging.enable();
+      marker.on('dragend', () => {
+        const pos = marker.getLatLng();
+        const nameMatch = marker.getPopup().getContent().match(/<b>(.*?)<\/b>/);
+        const roomName = nameMatch ? nameMatch[1] : 'Кабинет';
+        console.log(`Координаты для "${roomName}": x: ${Math.round(pos.lng)}, y: ${Math.round(pos.lat)}`);
+      });
     }
-  }, () => alert('Не удалось определить местоположение'));
+    
+  });
+} // Конец проверки if (floor.rooms)
 }
 
-document.getElementById('routeToCard').onclick = () => selected && buildRoute(selected);
-document.getElementById('routeBtn').onclick = () => {
-  if (selected) buildRoute(selected);
-  else alert('Сначала выберите объект');
+showPlanBtn.onclick = () => { if (selected) openPlan(selected); };
+
+document.getElementById('closePlan').onclick = () => {
+  planModal.classList.add('hidden');
+  if (planMap) { planMap.remove(); planMap = null; }
 };
+
+// ================= 6. РЕЖИМ РЕДАКТИРОВАНИЯ =================
+if (editBtn) {
+  editBtn.onclick = () => {
+    editMode = !editMode;
+    
+    if (editMode) {
+      editBtn.style.background = '#4caf50';
+      editBtn.textContent = '✅ Режим ВКЛ (тащите маркеры)';
+      alert('Режим редактирования ВКЛЮЧЕН.\nТеперь карта зафиксирована. Перетаскивайте кружочки!');
+    } else {
+      editBtn.style.background = '#ff9800';
+      editBtn.textContent = '🛠 Режим редактирования';
+    }
+
+    // Перерисовываем текущий этаж с новыми настройками
+    if (selected && planMap) {
+      const activeFloorBtn = Array.from(floorButtons.children).find(b => b.style.background === '#1b5e20' || b.style.background === 'rgb(27, 94, 32)');
+      if (activeFloorBtn) {
+        const floorName = activeFloorBtn.textContent;
+        const floorData = selected.floors.find(f => f.name === floorName);
+        if (floorData) loadFloorPlan(floorData); 
+      }
+    }
+  };
+}
+
+// ================= 7. ИИ-АССИСТЕНТ =================
+const aiBtn = document.getElementById('aiBtn');
+const aiChat = document.getElementById('aiChat');
+
+if (aiBtn && aiChat) {
+  const aiMessages = document.getElementById('aiMessages');
+  const aiInput = document.getElementById('aiInput');
+  const closeAi = document.getElementById('closeAi');
+  const sendAi = document.getElementById('sendAi');
+
+  aiBtn.onclick = () => { aiChat.style.display = aiChat.style.display === 'flex' ? 'none' : 'flex'; };
+  closeAi.onclick = () => { aiChat.style.display = 'none'; };
+
+window.askAI = function(text) {
+  if (!text) return;
+  
+  // Добавляем сообщение пользователя в чат
+  const userDiv = document.createElement('div');
+  userDiv.textContent = text;
+  userDiv.style.cssText = 'padding: 10px; border-radius: 8px; max-width: 80%; font-size: 14px; background: #1b5e20; color: white; align-self: flex-end;';
+  aiMessages.appendChild(userDiv);
+  
+  setTimeout(() => {
+    let response = "Я не нашел такой кабинет. Убедитесь, что он есть в data.js.";
+    const q = text.toLowerCase().trim();
+    
+    let foundFloor = null;
+    let foundRoom = null;
+
+    if (selected && selected.floors) {
+      
+      // 1. Ищем номер аудитории в тексте (например, 1.102 или 2.302)
+      const roomNumberMatch = q.match(/\d+\.\d+/); 
+      const roomNumber = roomNumberMatch ? roomNumberMatch[0] : null;
+
+      if (roomNumber) {
+        // Определяем, какой корпус просят (старый или новый)
+        const isNewBuilding = q.includes('нов');
+        const isOldBuilding = q.includes('стар');
+
+        // Перебираем все этажи
+        for (let floor of selected.floors) {
+          const floorName = floor.name.toLowerCase();
+          
+          // Если просят "новый", но этаж "старый" - пропускаем (и наоборот)
+          if (isNewBuilding && !floorName.includes('новый')) continue;
+          if (isOldBuilding && !floorName.includes('старый')) continue;
+
+          if (floor.rooms) {
+            // Ищем кабинет с таким номером
+            const room = floor.rooms.find(r => r.name.includes(roomNumber));
+            
+            if (room) {
+              foundFloor = floor;
+              foundRoom = room;
+              break;
+            }
+          }
+        }
+      } else {
+        // Если номер не указан, говорим, как спрашивать
+        response = "Пожалуйста, укажите номер аудитории (например: «где 1.102» или «где 2.302 в новом»).";
+      }
+    }
+
+    // Если нашли - строим маршрут
+    if (foundRoom && foundFloor) {
+      response = `Нашел кабинет ${foundRoom.name} (${foundRoom.desc}). Строю маршрут на этаже: ${foundFloor.name}.`;
+      drawIndoorRoute(foundFloor, foundRoom);
+    }
+
+    // Выводим ответ
+    const aiDiv = document.createElement('div');
+    aiDiv.textContent = response;
+    aiDiv.style.cssText = 'padding: 10px; border-radius: 8px; max-width: 80%; font-size: 14px; background: #e8f5e9; align-self: flex-start;';
+    aiMessages.appendChild(aiDiv);
+    aiMessages.scrollTop = aiMessages.scrollHeight;
+    
+  }, 600);
+  
+  aiMessages.scrollTop = aiMessages.scrollHeight;
+};
+
+// Обработчик кнопки отправки (зеленая стрелочка)
+sendAi.onclick = () => {
+  const val = aiInput.value.trim();
+  if (val) { 
+    window.askAI(val); 
+    aiInput.value = ''; 
+  }
+};
+
+// Обработчик нажатия клавиши Enter
+aiInput.onkeypress = (e) => {
+  if (e.key === 'Enter') {
+    const val = aiInput.value.trim();
+    if (val) { 
+      window.askAI(val); 
+      aiInput.value = ''; 
+    }
+  }
+};
+// ================= 8. МАРШРУТ ДО ОКТЁМСКОГО =================
+async function drawAgrotropaRoute() {
+  const startPoint = OBJECTS.find(o => o.id === 'agatu');
+  const endPoint = OBJECTS.find(o => o.id === 'oktemskiy');
+
+  if (!startPoint || !endPoint) {
+    alert('Ошибка: не найдены координаты в data.js');
+    return;
+  }
+
+  if (routeLine) map.removeLayer(routeLine);
+
+  const url = `https://router.project-osrm.org/route/v1/driving/${startPoint.lng},${startPoint.lat};${endPoint.lng},${endPoint.lat}?overview=full&geometries=geojson`;
+
+  try {
+    document.getElementById('routeInfo').classList.remove('hidden');
+    document.getElementById('routeInfo').innerHTML = '⏳ Строим маршрут...';
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.routes && data.routes[0]) {
+      const route = data.routes[0];
+      const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+      routeLine = L.polyline(coords, { color: '#1b5e20', weight: 6, opacity: 0.8, dashArray: '10, 10' }).addTo(map);
+      map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+      document.getElementById('routeInfo').innerHTML = `<b>Маршрут:</b><br>📏  ${(route.distance / 1000).toFixed(1)} км<br>⏱ ~${Math.round(route.duration / 60)} мин.`;
+    }
+  } catch (error) {
+    document.getElementById('routeInfo').innerHTML = '❌ Не удалось построить маршрут.';
+  }
+}
+
+document.getElementById('routeBtn').onclick = drawAgrotropaRoute;
+
 document.getElementById('clearRouteBtn').onclick = () => {
   if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
-  if (userMarker) { map.removeLayer(userMarker); userMarker = null; }
-  routeInfo.classList.add('hidden');
+  document.getElementById('routeInfo').classList.add('hidden');
 };
+// ================= 9. МАРШРУТ ВНУТРИ ЗДАНИЯ =================
 
-// ================= 12. ГЕОЛОКАЦИЯ =================
-document.getElementById('locateBtn').onclick = () => {
-  navigator.geolocation.getCurrentPosition(pos => {
-    const loc = [pos.coords.latitude, pos.coords.longitude];
-    map.setView(loc, 18);
-    if (userMarker) map.removeLayer(userMarker);
-    userMarker = L.marker(loc).addTo(map).bindPopup('Вы здесь').openPopup();
-  });
-};
+// Функция для отрисовки линии на плане этажа
+function drawIndoorRoute(floor, targetRoom, startX = 50, startY = 700) {
+  // Если карта этажа еще не открыта, открываем её
+  if (!planModal || planModal.classList.contains('hidden')) {
+    openPlan(selected); // Открываем модальное окно
+  }
 
-// ================= 13. ДОБАВЛЕНИЕ ОБЪЕКТА =================
-const addModal = document.getElementById('addModal');
-const addForm = document.getElementById('addForm');
+  // Ждем миллисекунду, чтобы карта успела прогрузиться
+  setTimeout(() => {
+    if (!planMap) return;
 
-document.getElementById('addBtn').onclick = () => {
-  addModal.classList.remove('hidden');
-  const c = map.getCenter();
-  addForm.lat.value = c.lat.toFixed(6);
-  addForm.lng.value = c.lng.toFixed(6);
-};
+    // 1. Находим нужную кнопку этажа и нажимаем её
+    const floorBtns = Array.from(floorButtons.children);
+    const targetBtn = floorBtns.find(b => b.textContent === floor.name);
+    if (targetBtn) targetBtn.click(); // Переключаем на нужный этаж
 
-document.getElementById('closeAdd').onclick = () => addModal.classList.add('hidden');
-addModal.onclick = e => { if (e.target === addModal) addModal.classList.add('hidden'); };
+    // 2. Ждем, пока перерисуется этаж, и рисуем линию
+    setTimeout(() => {
+      // Координаты входа (начальная точка маршрута)
+      // Вы можете поменять 50 и 700 на координаты главного входа в здание
+      const startPoint = [startY, startX]; 
+      const endPoint = [targetRoom.y, targetRoom.x];
 
-addForm.onsubmit = e => {
-  e.preventDefault();
-  const fd = new FormData(addForm);
-  const newObj = {
-    id: 'user_' + Date.now(),
-    name: fd.get('name'),
-    type: fd.get('type'),
-    desc: fd.get('desc'),
-    lat: parseFloat(fd.get('lat')),
-    lng: parseFloat(fd.get('lng')),
-    icon: fd.get('type') === 'building' ? '🏢 ' :
-          fd.get('type') === 'field' ? '🌾 ' :
-          fd.get('type') === 'pasture' ? '🐄 ' : '🌱 '
-  };
+      // Удаляем старую линию, если она была
+      if (window.indoorRouteLine) {
+        planMap.removeLayer(window.indoorRouteLine);
+      }
 
-  const userObjs = loadUserObjects();
-  userObjs.push(newObj);
-  saveUserObjects(userObjs);
+      // Рисуем линию маршрута
+      window.indoorRouteLine = L.polyline([startPoint, endPoint], {
+        color: '#ff0000', // Ярко-красный цвет
+        weight: 4,
+        dashArray: '5, 10', // Пунктирная линия
+        opacity: 0.8
+      }).addTo(planMap);
 
-  OBJECTS = [...BASE_OBJECTS, ...loadUserObjects()];
-  renderObjects();
+      // Добавляем кружочек на финиш (в сам кабинет)
+      L.circleMarker(endPoint, {
+        radius: 10,
+        color: 'red',
+        fillColor: 'red',
+        fillOpacity: 0.5
+      }).addTo(planMap);
 
-  addForm.reset();
-  addModal.classList.add('hidden');
-  map.setView([newObj.lat, newObj.lng], 18);
-  showCard(newObj);
-};
+      // Автоматически центрируем карту, чтобы было видно маршрут
+      planMap.fitBounds(window.indoorRouteLine.getBounds(), { padding: [50, 50] });
+
+    }, 100); // Задержка для перерисовки этажа
+  }, 100); // Задержка для открытия окна
+}
+}
