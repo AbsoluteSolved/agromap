@@ -237,7 +237,6 @@ body {
   color: #1b5e20; 
 }
 
-/* Форма добавления объекта (если используется) */
 .modal-content form label { 
   display: block;
 margin-bottom: 10px; 

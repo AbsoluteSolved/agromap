@@ -273,8 +273,6 @@ const BASE_OBJECTS = [
     icon: '🏫 ' 
   }
 ];
-
-// ===== Загрузка пользовательских объектов (если вы добавляли их через кнопку "+") =====
 function loadUserObjects() {
   const raw = localStorage.getItem('agromap_objects');
   return raw ? JSON.parse(raw) : [];

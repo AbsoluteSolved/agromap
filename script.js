@@ -4,18 +4,45 @@ const map = L.map('map', {
   zoom: 16,
   zoomControl: true
 });
-
-// Добавляем слой карты (Схема)
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
   attribution: '© OpenStreetMap' 
 }).addTo(map);
+//================= КОНТУР ТЕРРИТОРИИ АГАТУ =================
+const agatuBoundary = [
+  [62.011212, 129.686350],
+  [62.010484, 129.684131],
+  [62.010115, 129.684416],
+  [62.009819, 129.687185],
+  [62.008772, 129.686825],
+  [62.007238, 129.687530],
+  [62.006591, 129.689617],
+  [62.006446, 129.690691],
+  [62.007059, 129.693142],
+  [62.013123, 129.695610],
+  [62.013112, 129.692374],
+  [62.012709, 129.690826],
+  [62.011837, 129.690614],
+  [62.011837, 129.690614],
+  [62.010817, 129.690269],
+  [62.010826, 129.689894],
+  [62.010717, 129.689446],
+  [62.011212, 129.68635]
+];
+const agatuArea = L.polygon(agatuBoundary, {
+  color: '#265a29',       
+  weight: 3,              
+  fillColor: '#265a29',             
+  fillOpacity: 0.1,       
+  dashArray: '10, 10' 
+}).addTo(map);
+map.fitBounds(agatuArea.getBounds());
+agatuArea.bindPopup("<b>Территория АГАТУ</b><br>Арктический государственный агротехнологический университет");
 
 // Переменные
 let routeLine = null; 
 let markers = {};
-let editMode = false; // Глобальная переменная для режима редактирования
+let editMode = false;
 
-// Обработчик переключения стилей карты
 document.getElementById('styleSelect').addEventListener('change', (e) => {
   map.eachLayer((layer) => {
     if (layer instanceof L.TileLayer) map.removeLayer(layer);
@@ -147,7 +174,6 @@ btn.style.border = '1px solid #1b5e20';
 function loadFloorPlan(floor) {
   if (planMap) planMap.remove();
 
-  // Создаем карту Leaflet. Если editMode = true, карту нельзя двигать
   planMap = L.map('planMap', { 
     crs: L.CRS.Simple, 
     minZoom: -1, 
@@ -163,14 +189,10 @@ function loadFloorPlan(floor) {
   L.imageOverlay(floor.img, bounds).addTo(planMap);
   planMap.fitBounds(bounds);
 
-  // Проверяем, есть ли вообще кабинеты на этом этаже
 if (floor.rooms && floor.rooms.length > 0) {
   floor.rooms.forEach(room => {
-    
-    // 1. Создаем маркер
-    // Создаем обычный маркер (он умеет перетаскиваться), но стилизуем его как кружок
 const marker = L.marker([room.y, room.x], {
-  draggable: editMode, // Включаем перетаскивание, если нажат режим редактирования
+  draggable: editMode,
   icon: L.divIcon({
     className: 'custom-room-marker',
     html: `<div style="width: 16px; height: 16px; background-color: white; border: 2px solid #1b5e20; border-radius: 50%; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
@@ -178,8 +200,6 @@ const marker = L.marker([room.y, room.x], {
     iconAnchor: [8, 8]
   })
 }).addTo(planMap);
-
-    // 2. Привязываем всплывающее окно
     marker.bindPopup(`
       <div style="font-family: sans-serif; text-align: center;">
         <b style="color: #1b5e20; font-size: 14px;">${room.name}</b><br>
@@ -187,7 +207,6 @@ const marker = L.marker([room.y, room.x], {
       </div>
     `);
 
-    // 3. Включаем перетаскивание, ТОЛЬКО если включен режим редактирования
     if (editMode) {
       marker.dragging.enable();
       marker.on('dragend', () => {
@@ -199,7 +218,7 @@ const marker = L.marker([room.y, room.x], {
     }
     
   });
-} // Конец проверки if (floor.rooms)
+}
 }
 
 showPlanBtn.onclick = () => { if (selected) openPlan(selected); };
@@ -222,8 +241,6 @@ if (editBtn) {
       editBtn.style.background = '#ff9800';
       editBtn.textContent = '🛠 Режим редактирования';
     }
-
-    // Перерисовываем текущий этаж с новыми настройками
     if (selected && planMap) {
       const activeFloorBtn = Array.from(floorButtons.children).find(b => b.style.background === '#1b5e20' || b.style.background === 'rgb(27, 94, 32)');
       if (activeFloorBtn) {
@@ -250,8 +267,6 @@ if (aiBtn && aiChat) {
 
 window.askAI = function(text) {
   if (!text) return;
-  
-  // Добавляем сообщение пользователя в чат
   const userDiv = document.createElement('div');
   userDiv.textContent = text;
   userDiv.style.cssText = 'padding: 10px; border-radius: 8px; max-width: 80%; font-size: 14px; background: #1b5e20; color: white; align-self: flex-end;';
@@ -295,18 +310,14 @@ window.askAI = function(text) {
           }
         }
       } else {
-        // Если номер не указан, говорим, как спрашивать
         response = "Пожалуйста, укажите номер аудитории (например: «где 1.102» или «где 2.302 в новом»).";
       }
     }
-
     // Если нашли - строим маршрут
     if (foundRoom && foundFloor) {
       response = `Нашел кабинет ${foundRoom.name} (${foundRoom.desc}). Строю маршрут на этаже: ${foundFloor.name}.`;
       drawIndoorRoute(foundFloor, foundRoom);
     }
-
-    // Выводим ответ
     const aiDiv = document.createElement('div');
     aiDiv.textContent = response;
     aiDiv.style.cssText = 'padding: 10px; border-radius: 8px; max-width: 80%; font-size: 14px; background: #e8f5e9; align-self: flex-start;';
@@ -317,8 +328,6 @@ window.askAI = function(text) {
   
   aiMessages.scrollTop = aiMessages.scrollHeight;
 };
-
-// Обработчик кнопки отправки (зеленая стрелочка)
 sendAi.onclick = () => {
   const val = aiInput.value.trim();
   if (val) { 
@@ -377,55 +386,36 @@ document.getElementById('clearRouteBtn').onclick = () => {
   document.getElementById('routeInfo').classList.add('hidden');
 };
 // ================= 9. МАРШРУТ ВНУТРИ ЗДАНИЯ =================
-
-// Функция для отрисовки линии на плане этажа
 function drawIndoorRoute(floor, targetRoom, startX = 50, startY = 700) {
-  // Если карта этажа еще не открыта, открываем её
   if (!planModal || planModal.classList.contains('hidden')) {
-    openPlan(selected); // Открываем модальное окно
+    openPlan(selected);
   }
-
-  // Ждем миллисекунду, чтобы карта успела прогрузиться
   setTimeout(() => {
     if (!planMap) return;
-
-    // 1. Находим нужную кнопку этажа и нажимаем её
     const floorBtns = Array.from(floorButtons.children);
     const targetBtn = floorBtns.find(b => b.textContent === floor.name);
-    if (targetBtn) targetBtn.click(); // Переключаем на нужный этаж
-
-    // 2. Ждем, пока перерисуется этаж, и рисуем линию
+    if (targetBtn) targetBtn.click();
     setTimeout(() => {
-      // Координаты входа (начальная точка маршрута)
-      // Вы можете поменять 50 и 700 на координаты главного входа в здание
       const startPoint = [startY, startX]; 
       const endPoint = [targetRoom.y, targetRoom.x];
-
-      // Удаляем старую линию, если она была
       if (window.indoorRouteLine) {
         planMap.removeLayer(window.indoorRouteLine);
       }
-
-      // Рисуем линию маршрута
       window.indoorRouteLine = L.polyline([startPoint, endPoint], {
         color: '#ff0000', // Ярко-красный цвет
         weight: 4,
         dashArray: '5, 10', // Пунктирная линия
         opacity: 0.8
       }).addTo(planMap);
-
-      // Добавляем кружочек на финиш (в сам кабинет)
       L.circleMarker(endPoint, {
         radius: 10,
         color: 'red',
         fillColor: 'red',
         fillOpacity: 0.5
       }).addTo(planMap);
-
-      // Автоматически центрируем карту, чтобы было видно маршрут
       planMap.fitBounds(window.indoorRouteLine.getBounds(), { padding: [50, 50] });
 
-    }, 100); // Задержка для перерисовки этажа
-  }, 100); // Задержка для открытия окна
+    }, 100);
+  }, 100);
 }
 }
